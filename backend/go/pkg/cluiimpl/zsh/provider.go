@@ -20,7 +20,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-var defaultTranslator = &defaultTranslator{
+var defaultTranslator = &translator{
 	fieldSep: string([]byte{0x00, 0x1b}),       // \0\e
 	endSep:   string([]byte{0x00, 0x07, 0x1b}), // \0\a\e
 }
@@ -150,6 +150,7 @@ func (p *Provider) Start() (err error) {
 		return errors.Wrap(err, "cannot start zsh")
 	}
 
+	return
 }
 
 func (p *Provider) startKeyListener(quit chan struct{}, c chan notify.EventInfo) {
@@ -254,4 +255,5 @@ func (t *translator) translate(ris string) (csi completionSourceInfo, err error)
 
 	csi.buffer = spris[4]
 
+	return
 }
