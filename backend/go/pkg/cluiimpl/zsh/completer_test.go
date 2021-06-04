@@ -62,3 +62,12 @@ func TestCompletion(t *testing.T) {
 	require.Equal(ci.BufferLength, int64(2))
 
 }
+
+func TestWordCount(t *testing.T) {
+	require := require.New(t)
+
+	require.Equal((&completionSourceInfo{buffer: "   "}).isEmpty(), true)
+	require.Equal((&completionSourceInfo{buffer: "  \t\t\t "}).isEmpty(), true)
+	require.Equal((&completionSourceInfo{buffer: "\t word  \t "}).isFirstWord(), true)
+	require.Equal((&completionSourceInfo{buffer: "\t word  \t word2 \t  \t  "}).countWord(), int64(2))
+}

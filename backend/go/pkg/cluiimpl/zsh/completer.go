@@ -65,7 +65,7 @@ type completer struct {
 
 var defaultCompleter = &completer{
 	completerScriptPath: viper.GetString("ZSH_COMPLETER_SCRIPT_PATH"),
-	zshPath:             viper.GetString("ZSH_PATG"),
+	zshPath:             viper.GetString("ZSH_PATH"),
 	maxHelp:             10,
 }
 
@@ -127,6 +127,7 @@ COMPOPT_LOOP:
 		// TODO: cache the help results
 		// TODO: preload the help results for common commands that exist in the
 		//		 cotainer enviroment into the clinet
+		// TODO: execute the help commands parallelly to reduce the latency
 		if ci.IsFirst && (co.maxHelp == 0 || (co.maxHelp > 0 && compoptI < co.maxHelp)) {
 
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -134,8 +135,8 @@ COMPOPT_LOOP:
 
 			// disable zsh for faster help results
 			// helpCmd := exec.CommandContext(ctx, co.zshPath, "-c", fmt.Sprintf("%s --help", compopt))
-			cmdpath, err := exec.LookPath(compopt)
-			if err == nil {
+			cmdpath, herr := exec.LookPath(compopt)
+			if herr == nil {
 
 				helpCmd := exec.CommandContext(ctx, cmdpath, "--help")
 
