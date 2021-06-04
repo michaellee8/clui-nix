@@ -1,0 +1,13 @@
+version: v1beta1
+build:
+  roots:
+    - api
+
+lint:
+  use:
+    - BASIC
+
+breaking:
+  use:
+    - FILE
+
