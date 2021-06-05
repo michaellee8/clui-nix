@@ -1,2 +1,4 @@
-source ./install-key-listener.zsh
+scriptdir=$ZDOTDIR
+
+source $scriptdir/install-key-listener.zsh
 
