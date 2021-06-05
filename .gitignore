@@ -1,3 +1,5 @@
 Session.vim
 tmp.txt
 debug.test
+*.test
+*.prof

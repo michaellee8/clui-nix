@@ -15,9 +15,10 @@ function self-insert() {
         endsep=" \n"
     fi
 
-    echo "$endsep$(get_pos)$fieldsep$pwd$fieldsep$LBUFFER$fieldsep$RBUFFER$fieldsep$BUFFER$endsep" > $KEY_LISTENER_OUTPUT
-
     zle .self-insert
+    echo "$endsep$(get_pos)$fieldsep$pwd$fieldsep$LBUFFER$fieldsep$RBUFFER$fieldsep$BUFFER$endsep" & > $KEY_LISTENER_OUTPUT
+
+    # zle .self-insert
 }
 
 zle -N self-insert

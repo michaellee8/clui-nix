@@ -23,7 +23,7 @@ type Consumer interface {
 	// multiple concurrent invocation of Handle()
 	CompOptHandler() CompletionInfoHandler
 
-	// OnStart is a callback that will be called after the Provider has started
+	// OnStart is a callback that will be called right before the Provider starts
 	// the backing process and have all preparation done successfully. It should
 	// only be called once
 	OnStart()

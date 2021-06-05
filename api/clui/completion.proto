@@ -20,3 +20,13 @@ message CompletionInfo {
     bool is_first = 6;
     bool is_empty = 7;
 }
+
+message CompletionSourceInfo {
+    int64 col = 1;
+    int64 line = 2;
+    int64 dir = 3;
+    string l_buffer = 4;
+    string r_buffer = 5;
+    string buffer = 6;
+
+}

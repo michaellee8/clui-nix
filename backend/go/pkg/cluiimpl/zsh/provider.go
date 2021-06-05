@@ -107,14 +107,14 @@ func (p *Provider) Start() (err error) {
 		return errors.Wrap(err, "cannot create pipe for key listener")
 	}
 
-	p.pf, err = os.Open(pipePath)
-	if err != nil {
-		return errors.Wrap(err, "cannot open the pipe file that had just been created")
-	}
+	// p.pf, err = os.Open(pipePath)
+	// if err != nil {
+	// 	return errors.Wrap(err, "cannot open the pipe file that had just been created")
+	// }
 
 	p.pipePath = pipePath
 
-	zdotdir := filepath.Dir(p.zshPath)
+	zdotdir := filepath.Dir(p.installerPath)
 
 	env := os.Environ()
 	env = append(env, fmt.Sprintf("ZDOTDIR=%s", zdotdir))
@@ -176,7 +176,12 @@ func (p *Provider) startKeyListener(quit chan struct{}, c chan notify.EventInfo)
 }
 
 func (p *Provider) receiveRawCompletionSourceInfo() {
-	rb, err := io.ReadAll(p.pf)
+	pf, err := os.Open(p.pipePath)
+	if err != nil {
+		logrus.Errorf("unable to open pipe file: %+v", errors.Wrap(err, "cannot open pipefile"))
+	}
+	rb, err := io.ReadAll(pf)
+	// rb, err := io.ReadAll(p.pf)
 	if err != nil {
 		// if there is a read error we just discard this trial
 		// but we still log it for further debugging anyway
