@@ -3,6 +3,7 @@ package zsh
 import (
 	"io/fs"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,13 +15,11 @@ import (
 var testCompleter *completer
 var testDir = "~/.local/tmp/completer_test"
 
-func TestMain(m *testing.M) {
+func getCompleterScriptPath() string {
+
 	pwd, err := os.Getwd()
 	if err != nil {
 		log.Fatalln("unable to get pwd, exiting")
-	}
-	if err := os.MkdirAll(testDir, 0777); err != nil {
-		log.Fatalln("unable to create tmpdir, exiting")
 	}
 	log.Println("Running with pwd as: ", pwd)
 	scriptPath := pwd                     // zsh
@@ -29,7 +28,14 @@ func TestMain(m *testing.M) {
 	scriptPath = filepath.Dir(scriptPath) // go
 	scriptPath = filepath.Dir(scriptPath) // backend
 	scriptPath = filepath.Join(scriptPath, "scripts", "capture.zsh")
-	testCompleter = &completer{zshPath: "/bin/zsh", completerScriptPath: scriptPath, maxHelp: 10}
+	return scriptPath
+}
+
+func TestMain(m *testing.M) {
+	if err := os.MkdirAll(testDir, 0777); err != nil {
+		log.Fatalln("unable to create tmpdir, exiting")
+	}
+	testCompleter = &completer{zshPath: "/bin/zsh", completerScriptPath: getCompleterScriptPath(), maxHelp: 10}
 	logrus.SetLevel(logrus.DebugLevel)
 	os.Exit(m.Run())
 }
@@ -70,4 +76,40 @@ func TestWordCount(t *testing.T) {
 	require.Equal((&completionSourceInfo{buffer: "  \t\t\t "}).isEmpty(), true)
 	require.Equal((&completionSourceInfo{buffer: "\t word  \t "}).isFirstWord(), true)
 	require.Equal((&completionSourceInfo{buffer: "\t word  \t word2 \t  \t  "}).countWord(), int64(2))
+}
+
+// BenchmarkCompletion benchmark the completion speed of a random 1 letter command
+// suffix
+func BenchmarkCompletion(b *testing.B) {
+	logrus.SetLevel(logrus.ErrorLevel)
+	cmdLength := 1
+	var cmdb []byte
+	for i := 0; i < cmdLength; i++ {
+		cmdb = append(cmdb, byte(97+rand.Intn(26)))
+	}
+
+	randCmd := string(cmdb)
+	// TODO: use actual random comand, currently random command will stall the
+	// benchmark indefinitely
+	randCmd = "vi"
+	b.Logf("running with command %s", randCmd)
+
+	benchCompleter := &completer{zshPath: "/bin/zsh", completerScriptPath: getCompleterScriptPath(), maxHelp: b.N}
+	csi := completionSourceInfo{
+		dir:     testDir,
+		col:     15,
+		line:    20,
+		lbuffer: randCmd,
+		rbuffer: "",
+		buffer:  randCmd,
+	}
+
+	b.ResetTimer()
+
+	_, err := benchCompleter.getCompletion(csi)
+
+	if err != nil {
+		b.Fatal("cannot get completion, stopping: ", err)
+	}
+
 }
