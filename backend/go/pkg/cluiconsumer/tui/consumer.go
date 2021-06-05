@@ -1,42 +1,84 @@
 package tui
 
 import (
+	"fmt"
 	"io"
+	"os"
 
 	"github.com/michaellee8/clui-nix/backend/go/pkg/clui"
+	protoclui "github.com/michaellee8/clui-nix/backend/go/pkg/proto/clui"
+	"github.com/pkg/errors"
 )
 
+var esc = "\033"
+
+func getEscCode(n int, op string) string {
+	if n == 0 {
+		return fmt.Sprintf("%s[%s", esc, op)
+	}
+	return fmt.Sprintf("%s[%d%s", esc, n, op)
+}
+
+func printEscCode(n int, op string) {
+	fmt.Print(getEscCode(n, op))
+}
+
+// Consumer implements clui.Consumer for the tui frontend, it is adhoc and
+// is intended for demostration and testing purpose only, should not been
+// used in production, please use websocket consumer instead.
 type Consumer struct {
+	dir     string
+	input   io.Reader
+	output  io.Writer
+	handler clui.CompletionInfoHandler
 }
 
-// Dir should return the current working directory that the Consumer intends
-// to have, it is guaranteed the created process will have such cwd
+func (c *Consumer) Init() (err error) {
+	if c.dir, err = os.Getwd(); err != nil {
+		return errors.Wrap(err, "cannot get pwd")
+	}
+
+	c.input = os.Stdin
+	c.output = os.Stdout
+
+	return
+
+}
+
+func (c *Consumer) Handle(ci protoclui.CompletionInfo) {
+
+	if len(ci.Entries) == 0 {
+		// ignore if no entries
+		return
+	}
+
+	// save cursor pos
+	printEscCode(0, "s")
+
+	// move to our place to write first completion result
+	printEscCode(1, "E")
+
+	fmt.Printf("%s %s %d %d\n", ci.Entries[0].Suggestion, ci.Entries[0].Description, ci.Line, ci.Col)
+
+	// restore cursor pos
+	printEscCode(0, "u")
+}
+
 func (c *Consumer) Dir() string {
-	panic("not implemented") // TODO: Implement
+	return c.dir
 }
 
-// Input should return an io.Reader that the Consumer wants the provider to
-// read input from
 func (c *Consumer) Input() io.Reader {
-	panic("not implemented") // TODO: Implement
+	return c.input
 }
 
-// Output should return an io.Writer that the Consumer wants the provider to
-// write output to
 func (c *Consumer) Output() io.Writer {
-	panic("not implemented") // TODO: Implement
+	return c.output
 }
 
-// CompOptHandler should return an CompletionInfoHandler that will receives
-// all completion information provided by the Provider, it must be safe for
-// multiple concurrent invocation of Handle()
 func (c *Consumer) CompOptHandler() clui.CompletionInfoHandler {
 	panic("not implemented") // TODO: Implement
 }
 
-// OnStart is a callback that will be called after the Provider has started
-// the backing process and have all preparation done successfully. It should
-// only be called once
 func (c *Consumer) OnStart() {
-	panic("not implemented") // TODO: Implement
 }
