@@ -114,7 +114,7 @@ func (p *Provider) Start() (err error) {
 
 	p.pipePath = pipePath
 
-	zdotdir := filepath.Dir(p.zshPath)
+	zdotdir := filepath.Dir(p.installerPath)
 
 	env := os.Environ()
 	env = append(env, fmt.Sprintf("ZDOTDIR=%s", zdotdir))

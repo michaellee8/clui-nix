@@ -77,7 +77,7 @@ func (c *Consumer) Output() io.Writer {
 }
 
 func (c *Consumer) CompOptHandler() clui.CompletionInfoHandler {
-	panic("not implemented") // TODO: Implement
+	return c
 }
 
 func (c *Consumer) OnStart() {
