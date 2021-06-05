@@ -12,3 +12,8 @@ bench:
 
 profile:
 	go test -cpuprofile cpu.prof -memprofile mem.prof -bench . -run=^a ./backend/go/pkg/cluiimpl/zsh
+
+build: zkeylis
+
+zkeylis:
+	go build -o ./backend/scripts/zkeylis ./backend/go/cmd/zkeylis
