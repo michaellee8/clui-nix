@@ -1,4 +1,4 @@
-package zkeylis
+package main
 
 import (
 	"flag"
@@ -10,8 +10,8 @@ import (
 
 	"log"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/michaellee8/clui-nix/backend/go/pkg/proto/clui"
+	"google.golang.org/protobuf/proto"
 )
 
 func debugPrintln(s ...interface{}) {
@@ -29,6 +29,7 @@ func debugPrintf(f string, s ...interface{}) {
 func main() {
 	var pos, dir, buffer, lbuffer, rbuffer string
 	var urlstr string
+	var help bool
 
 	flag.StringVar(&pos, "pos", "", "postion of current cursor in line;col form")
 	flag.StringVar(&dir, "dir", "", "current working directory")
@@ -36,6 +37,13 @@ func main() {
 	flag.StringVar(&lbuffer, "lbuffer", "", "zsh lbuffer")
 	flag.StringVar(&rbuffer, "rbuffer", "", "zsh rbuffer")
 	flag.StringVar(&urlstr, "url", "", "url of the listening server")
+	flag.BoolVar(&help, "help", false, "show help message")
+	flag.Parse()
+
+	if help {
+		flag.PrintDefaults()
+		return
+	}
 
 	if urlstr == "" {
 		debugPrintln("url is empty")
@@ -99,7 +107,7 @@ func main() {
 
 	defer conn.Close()
 
-	rawCsi, err := proto.Marshal(csi)
+	rawCsi, err := proto.Marshal(&csi)
 
 	if err != nil {
 		debugPrintln(err)

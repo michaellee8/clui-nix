@@ -16,4 +16,4 @@ profile:
 build: zkeylis
 
 zkeylis:
-	go build -o ./backend/scripts/zkeylis ./backend/go/cmd/zkeylis
+	go build -o ./backend/scripts/zkeylis ./backend/go/cmd/zkeylis/main.go
