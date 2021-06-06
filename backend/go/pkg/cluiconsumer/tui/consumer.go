@@ -8,12 +8,13 @@ import (
 	"github.com/michaellee8/clui-nix/backend/go/pkg/clui"
 	protoclui "github.com/michaellee8/clui-nix/backend/go/pkg/proto/clui"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 var esc = "\033"
 
 func getEscCode(n int, op string) string {
-	if n == 0 {
+	if n < 0 {
 		return fmt.Sprintf("%s[%s", esc, op)
 	}
 	return fmt.Sprintf("%s[%d%s", esc, n, op)
@@ -47,21 +48,28 @@ func (c *Consumer) Init() (err error) {
 
 func (c *Consumer) Handle(ci *protoclui.CompletionInfo) {
 
+	logrus.Tracef("tui handling completion on bufl %d, count %d", ci.BufferLength, len(ci.Entries))
 	if len(ci.Entries) == 0 {
 		// ignore if no entries
 		return
 	}
 
 	// save cursor pos
-	printEscCode(0, "s")
+	printEscCode(-1, "s")
 
 	// move to our place to write first completion result
-	printEscCode(1, "E")
+	printEscCode(-1, "H")
+	printEscCode(-1, "K")
+	printEscCode(1, "m")
+	printEscCode(37, "m")
+	printEscCode(44, "m")
 
-	fmt.Printf("%s %s %d %d\n", ci.Entries[0].Suggestion, ci.Entries[0].Description, ci.Line, ci.Col)
+	fmt.Printf("%s %s %d %d", ci.Entries[0].Suggestion, ci.Entries[0].Description, ci.Line, ci.Col)
 
 	// restore cursor pos
-	printEscCode(0, "u")
+	printEscCode(-1, "u")
+
+	printEscCode(0, "m")
 }
 
 func (c *Consumer) Dir() string {

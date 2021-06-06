@@ -20,11 +20,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-var defaultTranslator = &translator{
-	fieldSep: string([]byte{0x00, 0x1b}),       // \0\e
-	endSep:   string([]byte{0x00, 0x07, 0x1b}), // \0\a\e
-}
-
 var keyListenerOutputEnvKey = "KEY_LISTENER_OUTPUT"
 
 // Provider provides the zsh implementation of clui
@@ -68,6 +63,15 @@ func (p *Provider) SetCompOptHandler(j clui.CompletionInfoHandler) {
 
 // NewProvider returns a new instance of Provider using default options
 func NewProvider() *Provider {
+	var defaultTranslator = &translator{
+		fieldSep: string([]byte{0x00, 0x1b}),       // \0\e
+		endSep:   string([]byte{0x00, 0x07, 0x1b}), // \0\a\e
+	}
+	var defaultCompleter = &completer{
+		completerScriptPath: viper.GetString("ZSH_COMPLETER_SCRIPT_PATH"),
+		zshPath:             viper.GetString("ZSH_PATH"),
+		maxHelp:             10,
+	}
 	return &Provider{
 		comp:          defaultCompleter,
 		trans:         defaultTranslator,
@@ -145,6 +149,8 @@ func (p *Provider) Start() (err error) {
 
 func (p *Provider) startKeyListener() {
 
+	logrus.Trace("starting key listener")
+
 	for {
 		conn, err := p.pf.Accept()
 		if err != nil {
@@ -157,6 +163,7 @@ func (p *Provider) startKeyListener() {
 }
 
 func (p *Provider) receiveRawCompletionSourceInfo(conn net.Conn) {
+	logrus.Trace("receiving raw CSI")
 	rcsi, err := io.ReadAll(conn)
 	if err != nil {
 		// if there is a read error we just discard this trial
@@ -172,7 +179,7 @@ func (p *Provider) receiveRawCompletionSourceInfo(conn net.Conn) {
 	}
 	ci, err := p.comp.getCompletion(csi)
 	if err != nil {
-		logrus.Errorf("cannot get cmpletion: %+v", errors.Wrap(err, "cannot get completion"))
+		logrus.Errorf("cannot get completion: %+v, %+v", errors.Wrap(err, "cannot get completion"), err)
 	}
 	p.compOptHandler.Handle(&ci)
 }
