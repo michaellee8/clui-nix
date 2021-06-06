@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
 	protoclui "github.com/michaellee8/clui-nix/backend/go/pkg/proto/clui"
 	"github.com/sirupsen/logrus"
-	"github.com/spf13/viper"
 )
 
 type completionSourceInfo struct {
@@ -63,12 +63,6 @@ type completer struct {
 	maxHelp int
 }
 
-var defaultCompleter = &completer{
-	completerScriptPath: viper.GetString("ZSH_COMPLETER_SCRIPT_PATH"),
-	zshPath:             viper.GetString("ZSH_PATH"),
-	maxHelp:             10,
-}
-
 // Do not process these commands, those are known to be buggy
 var blacklistedCommands = []string{
 	"vimtutor",
@@ -76,6 +70,8 @@ var blacklistedCommands = []string{
 
 // getCompletion provide the hacky logic the retrieve the completions results
 func (co *completer) getCompletion(csi completionSourceInfo) (ci protoclui.CompletionInfo, err error) {
+
+	logrus.Tracef("completing for %s at cwd %s", csi.buffer, csi.dir)
 
 	// Obtain Completion Results
 	cmd := exec.Cmd{
@@ -91,6 +87,9 @@ func (co *completer) getCompletion(csi completionSourceInfo) (ci protoclui.Compl
 	outStr := string(out)
 
 	cts := strings.Split(outStr, "\r\n")
+
+	// sort the completion result by alphabetical order
+	sort.Strings(cts)
 
 	// Compile these completions results into our CompletionInfo
 

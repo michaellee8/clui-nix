@@ -9,5 +9,5 @@ type StringSliceHandler interface {
 }
 
 type CompletionInfoHandler interface {
-	Handle(ci protoclui.CompletionInfo)
+	Handle(ci *protoclui.CompletionInfo)
 }

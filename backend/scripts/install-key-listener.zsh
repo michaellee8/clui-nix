@@ -16,7 +16,7 @@ function self-insert() {
     fi
 
     zle .self-insert
-    echo "$endsep$(get_pos)$fieldsep$pwd$fieldsep$LBUFFER$fieldsep$RBUFFER$fieldsep$BUFFER$endsep" & > $KEY_LISTENER_OUTPUT
+    $ZDOTDIR/zkeylis -url "$KEY_LISTENER_OUTPUT" -pos "$(get_pos)" -dir "$pwd" -buffer "$BUFFER" -lbuffer "$LBUFFER" -rbuffer "$RBUFFER"
 
     # zle .self-insert
 }

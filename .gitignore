@@ -3,3 +3,5 @@ tmp.txt
 debug.test
 *.test
 *.prof
+.zcompdump
+backend/scripts/zkeylis
