@@ -172,6 +172,10 @@ func (p *Provider) receiveRawCompletionSourceInfo(conn net.Conn) {
 		return
 	}
 
+	if err := conn.Close(); err != nil {
+		logrus.Error(errors.Wrap(err, "cannot close conn"))
+	}
+
 	csi, err := p.trans.translate(rcsi)
 	if err != nil {
 		logrus.Errorf("cannot translate raw CSI: %+v", errors.Wrap(err, "cannot translate raw CSI"))
