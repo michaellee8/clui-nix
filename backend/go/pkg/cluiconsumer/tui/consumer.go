@@ -45,7 +45,7 @@ func (c *Consumer) Init() (err error) {
 
 }
 
-func (c *Consumer) Handle(ci protoclui.CompletionInfo) {
+func (c *Consumer) Handle(ci *protoclui.CompletionInfo) {
 
 	if len(ci.Entries) == 0 {
 		// ignore if no entries

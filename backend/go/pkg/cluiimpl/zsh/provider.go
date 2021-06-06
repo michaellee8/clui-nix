@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
+	protoclui "github.com/michaellee8/clui-nix/backend/go/pkg/proto/clui"
 	"github.com/pkg/errors"
-	"github.com/rjeczalik/notify"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/michaellee8/clui-nix/backend/go/pkg/clui"
 	"github.com/spf13/viper"
@@ -40,7 +40,9 @@ type Provider struct {
 	zshPath        string
 	tmpPath        string
 	// pipe file opened for read
-	pf       *os.File
+	pf net.Listener
+	// it is a socket now, pipe is just here for historial reaons
+	// TODO: rename pipe* to sock*
 	pipePath string
 }
 
@@ -101,24 +103,25 @@ func (p *Provider) Start() (err error) {
 	pipeName := strconv.Itoa(int(time.Now().UnixNano()))
 	pipeName += strconv.Itoa(rand.Int())
 
-	pipePath := filepath.Join(p.tmpPath, pipeName)
+	sockPath := filepath.Join(p.tmpPath, pipeName)
 
-	if err := unix.Mkfifo(pipePath, 0666); err != nil {
-		return errors.Wrap(err, "cannot create pipe for key listener")
+	if p.pf, err = net.Listen("unixpacket", sockPath); err != nil {
+		return errors.Wrap(err, "cannot create unixpacket socket for key listener")
 	}
 
-	// p.pf, err = os.Open(pipePath)
-	// if err != nil {
-	// 	return errors.Wrap(err, "cannot open the pipe file that had just been created")
-	// }
+	defer func() {
+		if err := p.pf.Close(); err != nil {
+			logrus.Errorln(errors.Wrap(err, "closing key listener socket failed"))
+		}
+	}()
 
-	p.pipePath = pipePath
+	p.pipePath = sockPath
 
 	zdotdir := filepath.Dir(p.installerPath)
 
 	env := os.Environ()
 	env = append(env, fmt.Sprintf("ZDOTDIR=%s", zdotdir))
-	env = append(env, fmt.Sprintf("%s=%s", keyListenerOutputEnvKey, pipePath))
+	env = append(env, fmt.Sprintf("%s=unixpacket://%s", keyListenerOutputEnvKey, sockPath))
 
 	cmd := exec.Cmd{
 		Path: p.zshPath,
@@ -131,20 +134,7 @@ func (p *Provider) Start() (err error) {
 		Stderr: p.output,
 	}
 
-	quitListener := make(chan struct{}, 1)
-
-	defer func() { quitListener <- struct{}{} }()
-
-	c := make(chan notify.EventInfo, 1)
-
-	// We do everything that can throw an error in Start so we don't need to
-	// deal with error handling in startKeyListener
-
-	if err := notify.Watch(p.pipePath, c, notify.Write, notify.Remove); err != nil {
-		return errors.Wrap(err, "cannot setup pipe watch")
-	}
-
-	go p.startKeyListener(quitListener, c)
+	go p.startKeyListener()
 
 	if err := cmd.Run(); err != nil {
 		return errors.Wrap(err, "cannot start zsh")
@@ -153,73 +143,38 @@ func (p *Provider) Start() (err error) {
 	return
 }
 
-func (p *Provider) startKeyListener(quit chan struct{}, c chan notify.EventInfo) {
+func (p *Provider) startKeyListener() {
 
-	defer notify.Stop(c)
 	for {
-		select {
-		case ei := <-c:
-			switch ei.Event() {
-			case notify.Write:
-				// should not use goroutine here since the current implementation
-				// has an not thread-safe buffer. We may be able to remove the
-				// need of buffer if we can verify that the whole raw string
-				// is always received as a whole
-				p.receiveRawCompletionSourceInfo()
-			case notify.Remove:
-				return
-			}
-		case <-quit:
-			return
+		conn, err := p.pf.Accept()
+		if err != nil {
+			logrus.Errorln(errors.Wrap(err, "key listener accept failed"))
+			continue
 		}
+		go p.receiveRawCompletionSourceInfo(conn)
 	}
+
 }
 
-func (p *Provider) receiveRawCompletionSourceInfo() {
-	pf, err := os.Open(p.pipePath)
-	if err != nil {
-		logrus.Errorf("unable to open pipe file: %+v", errors.Wrap(err, "cannot open pipefile"))
-	}
-	rb, err := io.ReadAll(pf)
-	// rb, err := io.ReadAll(p.pf)
+func (p *Provider) receiveRawCompletionSourceInfo(conn net.Conn) {
+	rcsi, err := io.ReadAll(conn)
 	if err != nil {
 		// if there is a read error we just discard this trial
 		// but we still log it for further debugging anyway
 		logrus.Errorf("unable to read pipeFile: %+v", errors.Wrap(err, "cannot read pipeFile"))
 		return
 	}
-	rs := string(rb)
-	// we can not ensure that the console will write the whole raw CSI into
-	// the fifo instead of splitting it into a few chunks, so we need a buffer
-	// here, and then do futher processing only when we can see our endSep at
-	// least two times. After that truncate the part of buffer that has already
-	// been processed
-	// TODO: check if this code can be removed
-	p.pipeBuffer += rs
-	if strings.Count(p.pipeBuffer, p.trans.endSep) < 2 {
-		// nothing we can do here, let's skip to next input
-		logrus.Debugf("it is actually possible that the whole string is not written as a whole, current string is %s", p.pipeBuffer)
-		return
-	}
-	pbsp := strings.SplitN(p.pipeBuffer, p.trans.endSep, 3)
-	if len(pbsp) != 3 {
-		// shouldn't have been possible
-		logrus.Errorf("assert error: pbsp should have length of 3, error: %+v", errors.New("assert error"))
-		return
-	}
-	rawcsi := pbsp[1]
-	p.pipeBuffer = pbsp[2]
 
-	csi, err := p.trans.translate(rawcsi)
+	csi, err := p.trans.translate(rcsi)
 	if err != nil {
-		logrus.Errorf("cannot translate raw CSI:%+v", errors.Wrap(err, "cannot translate raw CSI"))
+		logrus.Errorf("cannot translate raw CSI: %+v", errors.Wrap(err, "cannot translate raw CSI"))
 		return
 	}
 	ci, err := p.comp.getCompletion(csi)
 	if err != nil {
 		logrus.Errorf("cannot get cmpletion: %+v", errors.Wrap(err, "cannot get completion"))
 	}
-	p.compOptHandler.Handle(ci)
+	p.compOptHandler.Handle(&ci)
 }
 
 type translator struct {
@@ -227,38 +182,23 @@ type translator struct {
 	endSep   string
 }
 
-func (t *translator) translate(ris string) (csi completionSourceInfo, err error) {
-	// format: $line;$col|$pwd|$LBUFFER|$RBUFFER|$BUFFER\n
-	// ; is as is, | is fieldsep, \n is endsep, endsep can be differeniated with
-	// fieldsep with the middle \a bell character
-	// ris := string(ri)
-	spris := strings.Split(ris, t.fieldSep)
-	if len(spris) != 5 {
-		return csi, errors.New("raw completion source info translate error: number of field is not exactly 5")
+func (t *translator) translate(rcsi []byte) (csi completionSourceInfo, err error) {
+
+	pcsi := protoclui.CompletionSourceInfo{}
+
+	if err := proto.Unmarshal(rcsi, &pcsi); err != nil {
+		return completionSourceInfo{}, errors.Wrap(err, "cannot unmarshal raw CSI")
 	}
 
-	sppos := strings.Split(spris[0], ";")
-	if len(sppos) != 2 {
-		return csi, errors.New("raw completion source info translate error: number of field is not exactly 2")
-	}
+	csi.line = int(pcsi.Line)
+	csi.col = int(pcsi.Col)
+	csi.dir = pcsi.Dir
 
-	csi.line, err = strconv.Atoi(sppos[0])
-	if err != nil {
-		return
-	}
+	csi.lbuffer = pcsi.LBuffer
 
-	csi.col, err = strconv.Atoi(sppos[1])
-	if err != nil {
-		return
-	}
+	csi.rbuffer = pcsi.RBuffer
 
-	csi.dir = spris[1]
-
-	csi.lbuffer = spris[2]
-
-	csi.rbuffer = spris[3]
-
-	csi.buffer = spris[4]
+	csi.buffer = pcsi.Buffer
 
 	return
 }
