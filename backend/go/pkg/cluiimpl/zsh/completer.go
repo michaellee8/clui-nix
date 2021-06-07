@@ -118,7 +118,7 @@ COMPOPT_LOOP:
 				continue COMPOPT_LOOP
 			}
 		}
-		logrus.Debug("compopt: ", compopt)
+		// logrus.Debug("compopt: ", compopt)
 		var description string
 
 		// if this is the first word, we can provide description of the command

@@ -2,7 +2,10 @@ package wsconsumer
 
 import (
 	"io"
+	"net"
 	"net/http"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -36,6 +39,8 @@ type Consumer struct {
 	CompleterPath string
 
 	mux *http.ServeMux
+
+	ser *http.Server
 
 	ioConn *websocket.Conn
 
@@ -125,7 +130,7 @@ func (c *Consumer) Write(p []byte) (n int, err error) {
 // clui.Connect
 func (c *Consumer) Init() (err error) {
 	if c.BindIP == "" {
-		c.BindIP = "0.0.0.01"
+		c.BindIP = "0.0.0.0"
 	}
 	if c.IOPath == "" {
 		c.IOPath = "/io"
@@ -137,7 +142,25 @@ func (c *Consumer) Init() (err error) {
 		return errors.New("Port must be set")
 	}
 
+	c.mux = http.NewServeMux()
+
 	c.mux.HandleFunc(c.CompleterPath, c.handleCompleter)
+	c.mux.HandleFunc(c.IOPath, c.handleIO)
+
+	c.ser = &http.Server{
+		Addr:    net.JoinHostPort(c.BindIP, strconv.Itoa(c.Port)),
+		Handler: c.mux,
+	}
+
+	go func() {
+		if err := c.ser.ListenAndServe(); err != nil {
+			if err == http.ErrServerClosed {
+				logrus.Infof("ws consumer server closed or shutdown: %+v", errors.Wrap(err, "server shutdown or closed"))
+			} else {
+				logrus.Fatalf("ws consumer server cannot start: %+v", errors.Wrap(err, "server cannot start"))
+			}
+		}
+	}()
 
 	return
 
@@ -266,25 +289,24 @@ func (c *Consumer) Handle(ci *protoclui.CompletionInfo) {
 
 // Dir implements the clui.Consumer interface
 func (c *Consumer) Dir() string {
-	panic("not implemented") // TODO: Implement
+	return os.Getenv("HOME")
 }
 
 // Input implements the clui.Consumer interface
 func (c *Consumer) Input() io.Reader {
-	panic("not implemented") // TODO: Implement
+	return c
 }
 
 // Output implements the clui.Consumer interface
 func (c *Consumer) Output() io.Writer {
-	panic("not implemented") // TODO: Implement
+	return c
 }
 
 // CompOptHandler implements the clui.Consumer interface
 func (c *Consumer) CompOptHandler() clui.CompletionInfoHandler {
-	panic("not implemented") // TODO: Implement
+	return c
 }
 
 // OnStart implements the clui.Consumer interface
 func (c *Consumer) OnStart() {
-	panic("not implemented") // TODO: Implement
 }

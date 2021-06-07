@@ -20,3 +20,6 @@ zkeylis:
 
 runtui:
 	go run ./backend/go/cmd/tui
+
+runws:
+	go run ./backend/go/cmd/ws
