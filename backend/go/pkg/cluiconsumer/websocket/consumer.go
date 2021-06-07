@@ -43,19 +43,82 @@ type Consumer struct {
 
 	completerMut sync.Mutex
 
-	ioMut sync.Mutex
+	ioMut sync.RWMutex
 
 	upgrader websocket.Upgrader
+
+	ioReadWait  chan struct{}
+	ioWriteWait chan struct{}
+
+	ioConnReader io.Reader
 }
 
 // Read implements io.Reader for terminal io
 func (c *Consumer) Read(p []byte) (n int, err error) {
-	panic("not implemented") // TODO: Implement
+	c.ioMut.RLock()
+	if c.ioConn == nil {
+		// wait for an connection
+		<-c.ioReadWait
+		if c.ioConn == nil {
+			// if this assertion failed, next steps will be a null pointer panic anyway, so we do the panic ourselves
+			logrus.Panic("fatal: assert failed: c.ioConn must be populated when c.ioReadWait is received, terminating program.")
+			return 0, errors.New("fatal: assert failed: c.ioConn is still nil")
+		}
+	}
+	c.ioMut.RUnlock()
+
+	// reference on converting ReadMessage into Read
+	// https://github.com/gorilla/websocket/issues/282
+
+	for {
+		if c.ioConnReader == nil {
+			// Advance to next message.
+			var err error
+
+			var mt int
+			mt, c.ioConnReader, err = c.ioConn.NextReader()
+			if err != nil {
+				return 0, errors.Wrap(err, "ws consumer read: ")
+			}
+			if mt != websocket.BinaryMessage {
+				logrus.Infof("assert failed: mt must be BinaryMessage, got %d instead", mt)
+			}
+
+		}
+		n, err := c.ioConnReader.Read(p)
+		if err == io.EOF {
+			// At end of message.
+			c.ioConnReader = nil
+			if n > 0 {
+				return n, nil
+			} else {
+				// No data read, continue to next message
+				continue
+			}
+		}
+		return n, errors.Wrap(err, "ws consumer read: cannot read message: ")
+	}
+
 }
 
 // Write implements io.Writer for terminal io
 func (c *Consumer) Write(p []byte) (n int, err error) {
-	panic("not implemented") // TODO: Implement
+	c.ioMut.RLock()
+	if c.ioConn == nil {
+		// wait for an connection
+		<-c.ioWriteWait
+		if c.ioConn == nil {
+			logrus.Panic("fatal: assert failed: c.ioConn must be populated when c.ioWriteWait is received, terminating program.")
+			return 0, errors.New("fatal: assert failed: c.ioConn is still nil")
+		}
+	}
+	c.ioMut.RUnlock()
+
+	err = c.ioConn.WriteMessage(websocket.BinaryMessage, p)
+	if err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
 
 // Init initiates the Consumer for consumption, it must be called before calling
@@ -75,6 +138,8 @@ func (c *Consumer) Init() (err error) {
 	}
 
 	c.mux.HandleFunc(c.CompleterPath, c.handleCompleter)
+
+	return
 
 }
 
@@ -113,6 +178,43 @@ func (c *Consumer) handleCompleter(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func (c *Consumer) handleIO(w http.ResponseWriter, r *http.Request) {
+
+	// Prevent conflict when accessed by multiple clients simulatenously
+
+	c.ioMut.Lock()
+
+	defer c.ioMut.Unlock()
+
+	if c.ioConn != nil {
+		// drop the connection if there are already a connection
+		logrus.Infof("non-first ws connection to io attempted by %s", r.RemoteAddr)
+		w.WriteHeader(http.StatusConflict)
+		return
+	}
+
+	conn, err := c.upgrader.Upgrade(w, r, nil)
+
+	if err != nil {
+		logrus.Infof("unable to upgrade websocket connection: ", errors.Wrap(err, "io ws upgrade"))
+		w.WriteHeader(http.StatusUpgradeRequired)
+		return
+	}
+
+	c.ioConn = conn
+
+	conn.SetCloseHandler(func(code int, text string) error {
+		logrus.Infof("io: received close message from %s", conn.RemoteAddr)
+		message := websocket.FormatCloseMessage(code, "")
+		c.ioConn.WriteControl(websocket.CloseMessage, message, time.Now().Add(time.Second))
+		c.resetCompleter()
+		return nil
+	})
+
+	c.ioReadWait <- struct{}{}
+	c.ioWriteWait <- struct{}{}
+}
+
 func (c *Consumer) resetCompleter() {
 
 	// Here we need to deals with both graceful shutdown on close based on error
@@ -126,6 +228,20 @@ func (c *Consumer) resetCompleter() {
 	logrus.Infof("completer: resetting connection from %s", c.completerConn.RemoteAddr)
 
 	c.completerConn = nil
+}
+func (c *Consumer) resetIO() {
+
+	// Here we need to deals with both graceful shutdown on close based on error
+	// handling, so we just remove the current connection to allow another client
+	// to connect
+
+	c.ioMut.Lock()
+
+	defer c.ioMut.Unlock()
+
+	logrus.Infof("io: resetting connection from %s", c.ioConn.RemoteAddr)
+
+	c.ioConn = nil
 }
 
 // Handle implements the clui.CompletionInfoHandler interface
