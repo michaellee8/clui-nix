@@ -2,8 +2,11 @@ package tui
 
 import (
 	"fmt"
+	"github.com/kr/pty"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/michaellee8/clui-nix/backend/go/pkg/clui"
 	protoclui "github.com/michaellee8/clui-nix/backend/go/pkg/proto/clui"
@@ -28,10 +31,12 @@ func printEscCode(n int, op string) {
 // is intended for demostration and testing purpose only, should not been
 // used in production, please use websocket consumer instead.
 type Consumer struct {
-	dir     string
-	input   io.Reader
-	output  io.Writer
-	handler clui.CompletionInfoHandler
+	dir          string
+	input        io.Reader
+	output       io.Writer
+	handler      clui.CompletionInfoHandler
+	winsizeChan  chan pty.Winsize
+	osSignalChan chan os.Signal
 }
 
 func (c *Consumer) Init() (err error) {
@@ -41,6 +46,23 @@ func (c *Consumer) Init() (err error) {
 
 	c.input = os.Stdin
 	c.output = os.Stdout
+
+	c.osSignalChan = make(chan os.Signal, 1)
+	signal.Notify(c.osSignalChan, syscall.SIGWINCH)
+
+	c.winsizeChan = make(chan pty.Winsize)
+
+	go func() {
+		for range c.osSignalChan {
+			if winsize, err := pty.GetsizeFull(os.Stdin); err != nil {
+				logrus.Error(errors.Wrap(err, "cannot get terminal size"))
+			} else {
+				c.winsizeChan <- *winsize
+			}
+		}
+	}()
+
+	c.osSignalChan <- syscall.SIGWINCH // initial resize
 
 	return
 
@@ -86,6 +108,10 @@ func (c *Consumer) Output() io.Writer {
 
 func (c *Consumer) CompOptHandler() clui.CompletionInfoHandler {
 	return c
+}
+
+func (c *Consumer) WinsizeChan() chan pty.Winsize {
+	return c.winsizeChan
 }
 
 func (c *Consumer) OnStart() {

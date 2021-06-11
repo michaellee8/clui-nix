@@ -2,6 +2,7 @@ package zsh
 
 import (
 	"fmt"
+	"github.com/kr/pty"
 	"io"
 	"math/rand"
 	"net"
@@ -28,6 +29,7 @@ type Provider struct {
 	input          io.Reader
 	output         io.Writer
 	compOptHandler clui.CompletionInfoHandler
+	winsizeChan    chan pty.Winsize
 	comp           *completer
 	trans          *translator
 	pipeBuffer     string
@@ -39,6 +41,10 @@ type Provider struct {
 	// it is a socket now, pipe is just here for historial reaons
 	// TODO: rename pipe* to sock*
 	pipePath string
+}
+
+func (p *Provider) SetWinsizeChan(winsizes chan pty.Winsize) {
+	p.winsizeChan = winsizes
 }
 
 // SetDir sets the current working directory of the process
@@ -98,6 +104,9 @@ func (p *Provider) Start() (err error) {
 	if p.compOptHandler == nil {
 		return errors.New("zsh provider: compOptHandler is not set")
 	}
+	if p.winsizeChan == nil {
+		return errors.New("zsh provider: winsizeChan is not set")
+	}
 
 	// created the named pipe used for communication
 	if err := os.MkdirAll(p.tmpPath, 0777); err != nil {
@@ -130,18 +139,44 @@ func (p *Provider) Start() (err error) {
 	cmd := exec.Cmd{
 		Path: p.zshPath,
 		// force interactive shell here, so maybe we don't need to use pty
-		Args:   []string{p.zshPath, "-i"},
-		Dir:    p.dir,
-		Env:    env,
-		Stdin:  p.input,
-		Stdout: p.output,
-		Stderr: p.output,
+		Args: []string{p.zshPath, "-i"},
+		Dir:  p.dir,
+		Env:  env,
 	}
 
 	go p.startKeyListener()
 
-	if err := cmd.Run(); err != nil {
+	ptmx, err := pty.Start(&cmd)
+
+	if err != nil {
+		logrus.Error("cannot start zsh: ", err)
 		return errors.Wrap(err, "cannot start zsh")
+	}
+
+	defer func() {
+		if err = ptmx.Close(); err != nil {
+			logrus.Error("cannot close zsh: ", err)
+
+		}
+	}()
+
+	go func() {
+		if _, err = io.Copy(ptmx, p.input); err != nil {
+			logrus.Error("cannot copy ptmx stdout to p.input: ", err)
+		}
+	}()
+
+	go func() {
+		for winsize := range p.winsizeChan {
+			if err := pty.Setsize(ptmx, &winsize); err != nil {
+				logrus.Error("zsh provder: unable to resize pty: ", err)
+			}
+		}
+	}()
+
+	if _, err = io.Copy(p.output, ptmx); err != nil {
+		logrus.Error("cannot copy p.output to ptmx stdin: ", err)
+		return errors.Wrap(err, "cannot copy")
 	}
 
 	return

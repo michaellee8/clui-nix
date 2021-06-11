@@ -1,6 +1,9 @@
 package clui
 
-import "io"
+import (
+	"github.com/kr/pty"
+	"io"
+)
 
 // Consumer represents any frontend that would like to consume the clui interface
 // for example an Websocket server or a terminal-based UI interface
@@ -22,6 +25,11 @@ type Consumer interface {
 	// all completion information provided by the Provider, it must be safe for
 	// multiple concurrent invocation of Handle()
 	CompOptHandler() CompletionInfoHandler
+
+	// WinsizeChan should return a chan Winsize that consumer will send all
+	// terminal resizes to, which will be received by receiver, it should not
+	// be a buffered channel
+	WinsizeChan() chan pty.Winsize
 
 	// OnStart is a callback that will be called right before the Provider starts
 	// the backing process and have all preparation done successfully. It should

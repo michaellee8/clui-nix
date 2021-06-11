@@ -10,6 +10,7 @@ func Connect(p Provider, c Consumer) (err error) {
 	p.SetInput(c.Input())
 	p.SetOutput(c.Output())
 	p.SetCompOptHandler(c.CompOptHandler())
+	p.SetWinsizeChan(c.WinsizeChan())
 	go c.OnStart()
 
 	return errors.Wrap(p.Start(), "clui connect failed")
