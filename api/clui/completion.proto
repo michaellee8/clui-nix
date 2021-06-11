@@ -8,22 +8,22 @@ message CompletionEntry {
     string actual_input = 1;
     string suggestion = 2;
     string description = 3;
-    int64 level = 4;
+    int32 level = 4;
     bool should_input = 5;
 }
 
 message CompletionInfo {
     repeated CompletionEntry entries = 1;
-    int64 col = 2;
-    int64 line = 3;
-    int64 buffer_length = 5;
+    int32 col = 2;
+    int32 line = 3;
+    int32 buffer_length = 5;
     bool is_first = 6;
     bool is_empty = 7;
 }
 
 message CompletionSourceInfo {
-    int64 col = 1;
-    int64 line = 2;
+    int32 col = 1;
+    int32 line = 2;
     string dir = 3;
     string l_buffer = 4;
     string r_buffer = 5;
