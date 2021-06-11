@@ -93,11 +93,11 @@ func (co *completer) getCompletion(csi completionSourceInfo) (ci protoclui.Compl
 
 	// Compile these completions results into our CompletionInfo
 
-	ci.Col = int64(csi.col)
-	ci.Line = int64(csi.line)
+	ci.Col = int32(csi.col)
+	ci.Line = int32(csi.line)
 	ci.IsEmpty = csi.isEmpty()
 	ci.IsFirst = csi.isFirstWord()
-	ci.BufferLength = int64(len(csi.buffer))
+	ci.BufferLength = int32(len(csi.buffer))
 
 	if ci.IsEmpty {
 		// we should suggest our own completion results if there are no command
