@@ -1,7 +1,9 @@
 package main
 
 import (
+	"golang.org/x/crypto/ssh/terminal"
 	"log"
+	"os"
 
 	"github.com/michaellee8/clui-nix/backend/go/pkg/clui"
 	"github.com/michaellee8/clui-nix/backend/go/pkg/cluiconsumer/tui"
@@ -43,6 +45,18 @@ func main() {
 	if err := tuiConsumer.Init(); err != nil {
 		log.Fatalln("cannot init tuiconsumer: ", err)
 	}
+
+	oldState, err := terminal.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		panic(err)
+	}
+
+	defer func() {
+		err := terminal.Restore(int(os.Stdin.Fd()), oldState)
+		if err != nil {
+			logrus.Error(errors.Wrap(err, "cannot restore terminal from raw mode"))
+		}
+	}()
 
 	if err := clui.Connect(zshProvider, &tuiConsumer); err != nil {
 		log.Fatalln("cannot connect: ", err)
